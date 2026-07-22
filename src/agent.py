@@ -1,4 +1,6 @@
-"""LangChain Agent für Scouting Buddy (LangChain 1.x, create_agent-API)."""
+"""Setzt den Agenten zusammen und kapselt die Kommunikation mit dem Modell."""
+import os
+
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
@@ -8,51 +10,131 @@ from src.tools import ALL_TOOLS
 
 load_dotenv()
 
-SYSTEM_PROMPT = """Du bist Scouting Buddy, ein Scouting-Assistent für Profifußball.
-Du beantwortest Fragen zu Spielerstatistiken ausschließlich über deine Tools –
-erfinde niemals Zahlen.
+SYSTEM_PROMPT = """Du bist Scouting Buddy, ein Assistent für Spielerdaten im Profifußball.
+Alle Zahlen holst du dir über deine Werkzeuge. Rate niemals einen Wert.
 
-## Data Dictionary (Spalten im Datensatz)
-- name, team, league, season, position ('Abwehr'|'Mittelfeld'|'Sturm'), minutes, source
-- goals, assists, xg, npxg, xa, shots, key_passes (Saisonsummen, Quelle: Understat)
-- jeweils auch als *_per90 (z. B. xg_per90, xa_per90, key_passes_per90)
-- Ligen: GER-Bundesliga, ENG-Premier League, ESP-La Liga, ITA-Serie A, FRA-Ligue 1
-- Saisons: z. B. '2526' für 2025/26
-- Achtung: Zeilen mit source='fbref_basic' (Zusatzligen) haben KEINE xG-Werte,
-  nur goals/assists. Ein Alter der Spieler ist nicht im Datensatz enthalten.
+## Was im Datensatz steht
+Stammdaten: name, team, league, season, position (Abwehr, Mittelfeld, Sturm),
+matches, minutes, source, birth_year, age
+Torgefahr: goals, npg (Tore ohne Elfmeter), xg, npxg, shots
+Kreativität: assists, xa, key_passes
+Angriffsbeteiligung: xg_chain (an Angriffen mit Abschluss beteiligt),
+xg_buildup (dasselbe ohne den Abschluss und den Assist, dadurch aussagekräftig
+für Sechser und Innenverteidiger)
+Disziplin: yellow_cards, red_cards
+Jeder Leistungswert existiert zusätzlich pro 90 Minuten, etwa xg_chain_per90.
 
-## Few-shot-Beispiele (Frage → korrekter Tool-Aufruf)
-Frage: "Die besten Bundesliga-Stürmer nach xG pro 90"
-→ query_players(position='Sturm', league='GER-Bundesliga', sort_by='xg_per90')
+Manchmal vorhanden: Spalten mit dem Präfix rating_, zum Beispiel rating_defending
+oder rating_tackle. Das sind Attributbewertungen aus SoFIFA, keine gemessenen
+Ereignisse. Sage das dazu, wenn du sie verwendest.
 
-Frage: "Kreative Mittelfeldspieler mit vielen Key Passes"
-→ query_players(position='Mittelfeld', sort_by='key_passes_per90')
+Ligen: GER-Bundesliga, ENG-Premier League, ESP-La Liga, ITA-Serie A, FRA-Ligue 1
+Saisons im Format 2526 für 2025/26.
 
-Frage: "Wie sehen die Zahlen von Vincenzo Grifo aus?"
-→ player_profile(name='Grifo')
+Das Alter leitet sich aus dem Geburtsjahr ab und ist deshalb ein Jahr unscharf.
+Bei knappen Grenzfällen wie U23 weise darauf hin. Fehlt das Geburtsjahr, taucht
+der Spieler bei Altersfiltern nicht auf.
 
-## Antwortstil
-Gib die Tabelle aus dem Tool wieder und ergänze 2–3 Sätze Einordnung.
-Weise auf Einschränkungen hin (z. B. geringe Spielminuten, fehlende Metriken).
-Wird nach Alter gefragt, erkläre transparent, dass diese Info nicht vorliegt."""
+Zeilen mit source gleich fbref_basic stammen aus Zusatzligen und enthalten nur
+Tore und Assists.
+
+## Was fehlt
+Zweikämpfe, Luftzweikämpfe, Tacklings, Interceptions sowie Pass- und
+Ballbesitzstatistiken. Diese Daten sind seit Januar 2026 nicht mehr frei
+verfügbar. Fragt jemand danach, rufe list_metrics auf, benenne die Lücke offen
+und schlage etwas Naheliegendes vor, etwa xg_buildup_per90 für den Spielaufbau.
+Ersetze eine fehlende Statistik nie kommentarlos durch eine andere.
+
+## Beispiele
+Frage: Die besten Bundesliga-Stürmer nach xG pro 90
+Aufruf: query_players(position='Sturm', league='GER-Bundesliga', sort_by='xg_per90')
+
+Frage: Kreative Mittelfeldspieler mit vielen Key Passes
+Aufruf: query_players(position='Mittelfeld', sort_by='key_passes_per90')
+
+Frage: U23-Verteidiger mit hohem xA pro 90
+Aufruf: query_players(position='Abwehr', max_age=23, sort_by='xa_per90')
+
+Frage: Welche Verteidiger sind am stärksten im Spielaufbau?
+Aufruf: query_players(position='Abwehr', sort_by='xg_buildup_per90')
+
+Frage: Wer gewinnt die meisten Luftzweikämpfe?
+Aufruf: list_metrics(), danach die Grenze erklären
+
+Frage: Wie sehen die Zahlen von Vincenzo Grifo aus?
+Aufruf: player_profile(name='Grifo')
+
+## Wie du antwortest
+Gib die Tabelle des Werkzeugs wieder und ordne sie in zwei bis drei Sätzen ein.
+Nenne Einschränkungen, die das Ergebnis relativieren, etwa wenige Spielminuten."""
+
+KEIN_SCHLUESSEL = (
+    "**Es ist kein OpenAI-Schlüssel hinterlegt.**\n\n"
+    "Ohne Schlüssel kann ich keine Fragen beantworten. So richtest du ihn ein:\n\n"
+    "1. Im Projektverzeichnis `.env.example` zu `.env` kopieren\n"
+    "2. Dort `OPENAI_API_KEY` auf deinen Schlüssel setzen\n"
+    "3. Die App neu starten\n\n"
+    "Die Datenübersicht oben funktioniert auch ohne Schlüssel."
+)
+
+SCHLUESSEL_ABGELEHNT = (
+    "**Der hinterlegte OpenAI-Schlüssel wurde abgelehnt.**\n\n"
+    "Prüf den Wert von `OPENAI_API_KEY` in deiner `.env` und starte die App neu."
+)
+
+KEIN_GUTHABEN = (
+    "**Das OpenAI-Konto hat kein Guthaben mehr.**\n\n"
+    "Prüf das Kontingent des hinterlegten Schlüssels."
+)
+
+# Beim ersten Start steht in der .env noch der Platzhalter aus .env.example.
+# Den als gültig zu behandeln würde nur eine kryptische 401 produzieren.
+PLATZHALTER = ("sk-...", "dein-key", "your-key-here")
+
+
+def has_api_key() -> bool:
+    """Prüft, ob ein Schlüssel gesetzt ist, der kein Platzhalter ist."""
+    schluessel = (os.getenv("OPENAI_API_KEY") or "").strip()
+    return bool(schluessel) and schluessel.lower() not in PLATZHALTER \
+        and not schluessel.startswith("sk-...")
 
 
 def build_agent():
-    """Erzeugt den Tool-Calling-Agent (LangGraph-basiert)."""
+    """Baut den Agenten, oder gibt None zurück, wenn kein Schlüssel da ist.
+
+    Ohne Schlüssel soll die App trotzdem starten, damit man sich zumindest die
+    Datenübersicht ansehen kann.
+    """
+    if not has_api_key():
+        return None
     llm = ChatOpenAI(model=MODEL_NAME, temperature=TEMPERATURE)
     return create_agent(model=llm, tools=ALL_TOOLS, system_prompt=SYSTEM_PROMPT)
 
 
-def ask(agent, question: str, history: list | None = None) -> str:
+def ask(agent, frage: str, verlauf: list | None = None) -> str:
     """Stellt eine Frage und gibt den Antworttext zurück.
 
-    history: Liste von LangChain-Messages aus vorherigen Turns.
+    Fehler werden hier zu lesbaren Sätzen, damit in der Oberfläche nie ein
+    roher Traceback landet.
     """
-    messages = list(history or []) + [{"role": "user", "content": question}]
-    result = agent.invoke({"messages": messages})
-    return result["messages"][-1].content
+    if agent is None:
+        return KEIN_SCHLUESSEL
+
+    nachrichten = list(verlauf or []) + [{"role": "user", "content": frage}]
+    try:
+        ergebnis = agent.invoke({"messages": nachrichten})
+    except Exception as fehler:  # noqa: BLE001
+        text = str(fehler).lower()
+        if any(hinweis in text for hinweis in
+               ("api key", "api_key", "authentication", "401", "invalid_api_key")):
+            return SCHLUESSEL_ABGELEHNT
+        if "quota" in text:
+            return KEIN_GUTHABEN
+        return f"**Da ist etwas schiefgelaufen:** {fehler}"
+
+    return ergebnis["messages"][-1].content
 
 
 if __name__ == "__main__":
-    agent = build_agent()
-    print(ask(agent, "Die 5 besten Spieler nach xA pro 90?"))
+    # Schneller Test ohne Oberfläche
+    print(ask(build_agent(), "Die 5 besten Spieler nach xA pro 90?"))

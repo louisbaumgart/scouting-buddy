@@ -55,6 +55,8 @@ Schneller Test ohne UI: `python -m src.agent`
 ## Projektstruktur
 
 ```
+├── .streamlit/
+│   ├── configtoml     # Streamlit config
 ├── src/
 │   ├── config.py      # Ligen, Saisons, Modell, Datenquellen-Schalter
 │   ├── data_prep.py   # Understat (+ optional fbref) → bereinigtes Parquet
