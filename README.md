@@ -52,22 +52,6 @@ Schneller Test ohne UI: `python -m src.agent`
 > Die ältere Kombination `AgentExecutor` + `create_tool_calling_agent` liegt seit
 > LangChain 1.0 im Paket `langchain-classic` und wird hier bewusst nicht verwendet.
 
-## GitHub-Setup
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: Scouting Buddy Grundgerüst"
-
-# Repo auf github.com anlegen (ohne README), dann:
-git remote add origin https://github.com/<DEIN-USER>/scouting-buddy.git
-git branch -M main
-git push -u origin main
-```
-
-**Wichtig:** `.env` (API-Key) und `data/*.parquet` sind über `.gitignore`
-ausgeschlossen – der Key darf nie ins Repo.
-
 ## Projektstruktur
 
 ```
