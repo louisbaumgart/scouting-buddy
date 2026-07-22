@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Daten (werden lokal per data_prep.py erzeugt)
+data/*.parquet
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# soccerdata Cache
+.soccerdata/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
