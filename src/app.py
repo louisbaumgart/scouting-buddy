@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd
 import streamlit as st
 
+from src import tools
 from src.agent import build_agent, ask
 from src.config import PLAYERS_PARQUET
 
@@ -58,7 +59,7 @@ SPIELFELD = (
     "</svg>"
 )
 
-st.set_page_config(page_title="Scouting Buddy", page_icon="⚽", layout="centered")
+st.set_page_config(page_title="Scouting Buddy", layout="centered")
 
 st.markdown(
     f"""
@@ -229,14 +230,111 @@ for nachricht in st.session_state.verlauf:
     with st.chat_message(nachricht["role"]):
         st.markdown(nachricht["content"])
 
+def zeichne_balkendiagramm(chart: dict) -> None:
+    """Zeigt eine Rangliste aus query_players als horizontale Balken.
+
+    Die Balken laufen von hell nach dunkler durch die Champagne-Töne, der
+    Spitzenwert steht oben.
+    """
+    import plotly.graph_objects as go
+
+    eintraege = chart["eintraege"]
+    if len(eintraege) < 2:
+        return
+
+    namen = [e["name"] for e in eintraege]
+    werte = [e["wert"] for e in eintraege]
+
+    # Vom vollen Champagne zum abgedunkelten Ton, damit die Rangfolge auch
+    # farblich lesbar ist.
+    def abstufung(anteil: float) -> str:
+        hell = (248, 231, 201)
+        dunkel = (150, 132, 100)
+        r, g, b = (round(h + (d - h) * anteil) for h, d in zip(hell, dunkel))
+        return f"rgb({r},{g},{b})"
+
+    farben = [abstufung(i / max(len(werte) - 1, 1)) for i in range(len(werte))]
+
+    fig = go.Figure(go.Bar(
+        x=werte[::-1],
+        y=namen[::-1],
+        orientation="h",
+        marker=dict(color=farben[::-1]),
+        text=[f"{w:.2f}" for w in werte[::-1]],
+        textposition="outside",
+        textfont=dict(color=CHAMPAGNE),
+    ))
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(title=chart["metrik"], gridcolor="rgba(248,231,201,0.15)",
+                   tickfont=dict(color=CHAMPAGNE), title_font=dict(color=CHAMPAGNE)),
+        yaxis=dict(tickfont=dict(color=CHAMPAGNE)),
+        margin=dict(l=10, r=40, t=10, b=10),
+        height=max(220, 45 * len(werte)),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def zeichne_spinnendiagramm(radar: dict) -> None:
+    """Stellt die Profile aus der Ähnlichkeitssuche als Spinnendiagramm dar.
+
+    Die Achsen zeigen Perzentile innerhalb des Vergleichspools, dadurch haben
+    alle dieselbe Skala von 0 bis 100.
+    """
+    import plotly.graph_objects as go
+
+    # Referenz in Champagne, die Vergleichsspieler in klar unterscheidbaren
+    # Farben statt feiner Abstufungen eines Tons. Auf dem dunklen Grün heben
+    # sich Himmelblau, Koralle und Flieder deutlich voneinander ab.
+    farben = [CHAMPAGNE, "#5ec8e5", "#f28d6f", "#c39bd4"]
+    fig = go.Figure()
+
+    profile = [radar["referenz"]] + radar["spieler"]
+    for i, eintrag in enumerate(profile):
+        achsen = list(eintrag["werte"].keys())
+        werte = list(eintrag["werte"].values())
+        fig.add_trace(go.Scatterpolar(
+            r=werte + werte[:1],
+            theta=achsen + achsen[:1],
+            name=eintrag["name"] + (" (Referenz)" if i == 0 else ""),
+            line=dict(color=farben[i % len(farben)], width=3.5 if i == 0 else 2.5,
+                      dash="solid" if i == 0 else ["solid", "dash", "dot", "dashdot"][i % 4]),
+            fill="toself" if i == 0 else "none",
+        ))
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(range=[0, 100], gridcolor="rgba(248,231,201,0.2)",
+                            tickfont=dict(color=CHAMPAGNE, size=10)),
+            angularaxis=dict(gridcolor="rgba(248,231,201,0.2)",
+                             tickfont=dict(color=CHAMPAGNE, size=12)),
+        ),
+        legend=dict(font=dict(color=CHAMPAGNE)),
+        margin=dict(l=60, r=60, t=30, b=30),
+        height=420,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Achsen zeigen Perzentile im Vergleichspool, 100 ist der Bestwert.")
+
+
 if frage:
     with st.chat_message("user"):
         st.markdown(frage)
 
     with st.chat_message("assistant"):
         with st.spinner("Einen Moment"):
+            tools.LAST_RADAR.clear()
+            tools.LAST_CHART.clear()
             antwort = ask(st.session_state.agent, frage, st.session_state.verlauf)
         st.markdown(antwort)
+        if tools.LAST_RADAR:
+            zeichne_spinnendiagramm(dict(tools.LAST_RADAR))
+        elif tools.LAST_CHART:
+            zeichne_balkendiagramm(dict(tools.LAST_CHART))
 
     st.session_state.verlauf += [
         {"role": "user", "content": frage},

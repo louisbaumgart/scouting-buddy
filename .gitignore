@@ -3,6 +3,7 @@
 
 # Daten (werden lokal per data_prep.py erzeugt)
 data/*.parquet
+eval/report.md
 
 # Python
 __pycache__/

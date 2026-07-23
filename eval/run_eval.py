@@ -164,19 +164,26 @@ def schreibe_report(ergebnisse: list[dict]) -> None:
             f"`{formatiere_aufrufe(e['aufrufe'])}` | {e['begruendung']} |"
         )
 
-    manuelle = [e for e in ergebnisse if e["note"] == MANUELL]
-    if manuelle:
-        zeilen += ["", "## Manuell zu prüfen", ""]
-        for e in manuelle:
+    # Ohne den Antworttext laesst sich ein Fehlschlag nicht diagnostizieren.
+    # Deshalb landen fehlerhafte Faelle hier genauso im Bericht wie die
+    # manuell zu bewertenden.
+    auffaellig = [e for e in ergebnisse if e["note"] != OK]
+    if auffaellig:
+        zeilen += ["", "## Antworten im Wortlaut", ""]
+        for e in auffaellig:
             fall = e["fall"]
+            zeilen += [f"### {fall.nummer}. {fall.frage}", ""]
+            if e["note"] == MANUELL:
+                zeilen += [
+                    f"Worauf achten: {fall.worauf_achten or 'inhaltliche Angemessenheit'}",
+                    "",
+                ]
+            else:
+                zeilen += [f"Bewertet als {e['note']}: {e['begruendung']}", ""]
             zeilen += [
-                f"### {fall.nummer}. {fall.frage}",
-                "",
-                f"Worauf achten: {fall.worauf_achten or 'inhaltliche Angemessenheit'}",
-                "",
                 "Antwort des Assistenten:",
                 "",
-                "> " + e["antwort"].replace("\n", "\n> "),
+                "> " + (e["antwort"] or "keine Antwort").replace("\n", "\n> "),
                 "",
             ]
 

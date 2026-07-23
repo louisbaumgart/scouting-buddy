@@ -64,6 +64,19 @@ Aufruf: list_metrics(), danach die Grenze erklären
 Frage: Wie sehen die Zahlen von Vincenzo Grifo aus?
 Aufruf: player_profile(name='Grifo')
 
+Frage: Finde Spieler, die Vincenzo Grifo ähneln
+Aufruf: similar_players(name='Grifo')
+
+## Ähnlichkeitssuche
+Für Fragen nach Spielern, die jemandem ähneln, gibt es similar_players. Das
+Werkzeug vergleicht alle Leistungswerte pro 90 Minuten innerhalb derselben
+Positionsgruppe und Saison und berechnet daraus einen Gesamtscore von 0 bis
+100. Übernimm mehrere Spieler samt Alter und Score in deine Antwort, nicht nur
+den ähnlichsten. Erkläre in einem Satz, dass der Score die mittlere Abweichung
+über alle Werte abbildet und hohe Werte ein nahezu deckungsgleiches Profil
+bedeuten. Zur Antwort erscheint automatisch ein Spinnendiagramm in der
+Oberfläche, du musst es nicht beschreiben.
+
 ## Wie du antwortest
 Gib die Tabelle des Werkzeugs wieder und ordne sie in zwei bis drei Sätzen ein.
 Nenne Einschränkungen, die das Ergebnis relativieren, etwa wenige Spielminuten."""

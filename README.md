@@ -4,13 +4,41 @@ Ein digitaler Scouting-Assistent, der natürlichsprachliche Fragen
 zu Spielerstatistiken per **Tool-Use / Function Calling** in strukturierte
 Datenabfragen übersetzt. Umgesetzt mit **LangChain, OpenAI API und Streamlit**.
 
+## Was der Assistent kann
+
+| Frage (Beispiel) | Werkzeug | Antwort |
+|---|---|---|
+| "Beste Bundesliga-Stürmer nach xG pro 90" | `query_players` | Tabelle + Balkendiagramm |
+| "U23-Mittelfeldspieler mit den meisten Key Passes" | `query_players` | Tabelle + Balkendiagramm |
+| "Wie sehen die Zahlen von Vincenzo Grifo aus?" | `player_profile` | alle Saisonwerte des Spielers |
+| "Finde Spieler, die Vincenzo Grifo ähneln" | `similar_players` | Kennwerte, Score-Rangliste + Spinnendiagramm |
+| "Welche Statistiken kannst du auswerten?" | `list_metrics` | Übersicht inkl. der Lücken |
+| "Wer gewinnt die meisten Luftzweikämpfe?" | `list_metrics` | benennt die fehlenden Daten, statt zu raten |
+
+Filtern lässt sich nach Positionsgruppe, Liga, Verein, Saison, Einsatzminuten
+und Alter (etwa U23), sortieren nach jeder Kennzahl im Datensatz.
+
+**Diagramme:** Ranglisten erscheinen zusätzlich als horizontales Balkendiagramm
+in den Farben der Oberfläche. Die Ähnlichkeitssuche zeigt ein Spinnendiagramm,
+in dem der Referenzspieler und die drei ähnlichsten Profile als Perzentile
+übereinanderliegen.
+
+### Ähnlichkeitssuche
+
+`similar_players` vergleicht einen Referenzspieler über alle zehn
+Leistungswerte pro 90 Minuten mit Feldspielern derselben Positionsgruppe und
+Saison (mindestens 450 Minuten). Die Werte werden standardisiert, aus der
+mittleren Abweichung entsteht ein Gesamtscore von 0 bis 100. Die Antwort nennt
+zuerst die Kennwerte des angefragten Spielers samt Einordnung im Pool, dann
+die ähnlichsten Spieler mit Alter und Score.
+
 ## Architektur
 
 ```
 Nutzer → Streamlit-Chat → LangChain Agent (create_agent, GPT-4o)
-           → Tools: query_players / player_profile / list_metrics
+           → Tools: query_players / player_profile / list_metrics / similar_players
                     (Pandas auf Parquet)
-           → Antwort: Tabelle + Einordnung
+           → Antwort: Tabelle + Einordnung, dazu Balken- oder Spinnendiagramm
 ```
 
 Techniken: Tool-Use, Few-shot Prompting (im System-Prompt), Evaluation über
@@ -18,7 +46,9 @@ ein Testset (`eval/`).
 
 Das Modell schreibt bewusst keinen freien Code, sondern wählt eine Funktion und
 füllt getypte Parameter. Das ist sicherer und liefert verlässlichere Ergebnisse,
-weil ungültige Eingaben sofort auffallen.
+weil ungültige Eingaben sofort auffallen. Die Diagramme entstehen nicht im
+Sprachmodell: Die Werkzeuge legen die Daten in einem Übergabepunkt ab, die
+Oberfläche liest ihn nach der Antwort aus und rendert mit Plotly.
 
 ## Datengrundlage
 
@@ -67,6 +97,8 @@ Schneller Test ohne UI: `python -m src.agent`
 
 Ohne hinterlegten Schlüssel startet die App trotzdem. Die Datenübersicht bleibt
 nutzbar, auf Fragen antwortet der Assistent mit einem Hinweis auf die `.env`.
+Auch ein abgelehnter Schlüssel oder fehlendes Guthaben führen zu einer
+erklärenden Antwort im Chat statt zu einem Traceback.
 
 > Hinweis: Das Projekt nutzt die **LangChain-1.x-API** (`create_agent`).
 > Die ältere Kombination `AgentExecutor` + `create_tool_calling_agent` liegt seit
@@ -88,7 +120,8 @@ Das Ergebnis landet in `eval/report.md`: Trefferquote, eine Tabelle mit allen
 Werkzeugaufrufen und die Volltexte der Antworten, die von Hand zu beurteilen
 sind. Fälle, bei denen es auf eine Rückfrage oder eine erklärte Grenze ankommt,
 sind in `eval/cases.py` als `manuell` markiert. Das Skript sammelt dort die
-Antwort ein, die Bewertung nimmst du selbst vor.
+Antwort ein, die Bewertung nimmst du selbst vor. Auch fehlerhafte Fälle stehen
+mit ihrem Antworttext im Bericht, damit sich die Ursache nachvollziehen lässt.
 
 Jeder Fall kostet einen Modellaufruf. `eval/test_questions.md` enthält
 dieselben Fälle in einer Fassung zum Abhaken von Hand.
@@ -101,9 +134,9 @@ dieselben Fälle in einer Fassung zum Abhaken von Hand.
 ├── src/
 │   ├── config.py          # Ligen, Saisons, Modell, Datenquellen-Schalter
 │   ├── data_prep.py       # Understat + fbref + SoFIFA → bereinigtes Parquet
-│   ├── tools.py           # strukturierte Tools (Function Calling)
+│   ├── tools.py           # strukturierte Tools inkl. Ähnlichkeitssuche
 │   ├── agent.py           # Agent, System-Prompt, Fehlerbehandlung
-│   └── app.py             # Streamlit-Chat
+│   └── app.py             # Streamlit-Chat mit Balken- und Spinnendiagramm
 ├── eval/
 │   ├── cases.py           # Testfälle als Datenobjekte
 │   ├── run_eval.py        # automatisierter Lauf, schreibt report.md
@@ -116,7 +149,8 @@ dieselben Fälle in einer Fassung zum Abhaken von Hand.
 
 ## Mögliche Erweiterungen
 
-- Plot-Tool (Scatter xG vs. Tore) als weiteres Werkzeug
 - RAG über Scouting-Berichte als zweite Technik
 - Exaktes Geburtsdatum über Transfermarkt, um die Unschärfe beim Alter zu beheben
 - Mehrere Evaluationsläufe vergleichen, um die Stabilität der Werkzeugwahl zu messen
+- Ähnlichkeitssuche über Saisons hinweg, etwa um den Nachfolger eines Abgangs zu finden
+- Gewichtung der Kennzahlen in der Ähnlichkeitssuche, z. B. Kreativität stärker als Torgefahr

@@ -77,9 +77,10 @@ FAELLE = [
         {"position": "Abwehr", "sort_by": "xg_buildup_per90"},
     ),
     Testfall(
-        10, "Wer ist an den meisten Angriffen beteiligt?",
+        10, "Welche Mittelfeldspieler sind an den meisten Angriffen beteiligt?",
         ["query_players"],
-        {"sort_by": "xg_chain_per90"},
+        {"position": "Mittelfeld", "sort_by": "xg_chain_per90"},
+        worauf_achten="Wird xg_chain statt xg_buildup gewählt?",
     ),
 
     # Der wichtigste Block: Fragen, die der Datensatz nicht beantworten kann.
@@ -101,9 +102,12 @@ FAELLE = [
     ),
     Testfall(
         14, "Zeig mir die besten Torhüter",
-        ["query_players", "list_metrics"],
+        [],
         manuell=True,
-        worauf_achten="Torhüter sind bewusst ausgeschlossen, steht aber nicht im Prompt.",
+        worauf_achten=("Torhüter sind in data_prep ausgeschlossen. Der Prompt "
+                       "nennt nur Abwehr, Mittelfeld und Sturm, daraus lässt "
+                       "sich das ableiten. Eine Antwort ohne Werkzeugaufruf ist "
+                       "hier richtig."),
     ),
     Testfall(
         15, "Wer sind aktuell die besten Spieler?",
@@ -116,5 +120,26 @@ FAELLE = [
         [],
         manuell=True,
         worauf_achten="Wird die Prognose abgelehnt, statt Zahlen zu erfinden?",
+    ),
+    Testfall(
+        17, "Wer ist an den meisten Angriffen beteiligt?",
+        ["query_players"],
+        manuell=True,
+        worauf_achten=("Bewusst ohne Position und Liga gestellt. Rückfrage und "
+                       "begründete Annahme sind beide vertretbar, ein stiller "
+                       "Griff zu irgendeinem Filter nicht."),
+    ),
+
+    # Ähnlichkeitssuche
+    Testfall(
+        18, "Finde Spieler, die Vincenzo Grifo ähneln",
+        ["similar_players"],
+        {"name": "Grifo"},
+    ),
+    Testfall(
+        19, "Wer spielt so ähnlich wie Aleksandar Pavlovic?",
+        ["similar_players"],
+        {"name": "Pavlovic"},
+        worauf_achten="Werden mehrere Spieler samt Alter und Score genannt?",
     ),
 ]
