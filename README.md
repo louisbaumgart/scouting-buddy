@@ -144,6 +144,7 @@ dieselben Fälle in einer Fassung zum Abhaken von Hand.
 │   ├── run_eval.py        # automatisierter Lauf, schreibt report.md
 │   └── test_questions.md  # dieselben Fälle zum manuellen Abhaken
 ├── data/                  # players.parquet, nicht im Repo
+├── assets/                # assets in use
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
