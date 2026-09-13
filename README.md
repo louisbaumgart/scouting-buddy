@@ -41,6 +41,8 @@ Nutzer → Streamlit-Chat → LangChain Agent (create_agent, GPT-4o)
            → Antwort: Tabelle + Einordnung, dazu Balken- oder Spinnendiagramm
 ```
 
+![Architektur](assets/scouting_buddy_prozesskette.svg)
+
 Techniken: Tool-Use, Few-shot Prompting (im System-Prompt), Evaluation über
 ein Testset (`eval/`).
 
